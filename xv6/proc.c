@@ -458,9 +458,9 @@ kill(int pid)
   return -1;
 }
 
-// Retorna se a página apontada por pte possui alguma posição de memória sendo utilizada
+// Função que verifica se alguma posição de memória está sendo utilizada
 uint
-temPosicaoUtilizada(pte_t *pte)
+hasAnyPositionUsed(pte_t *pte)
 {
     int i;
     for (i = 0; i < NPTENTRIES; i++)
@@ -496,14 +496,14 @@ procdump(void)
   char *state;
   uint pc[10];
 
-  // Declaracoes para task1
-  pte_t *pde; // Endereco virtual para o diretorio de paginas do processo
-  pte_t *pte; // Endereco fisico para uma page table
-  pte_t *pte_va; // Endereco virtual para uma page table
-  pte_t *ppn; // Phisical Page Number
-  pte_t *vpn; // Virtual Page Number
-  int dirindex;
-  int pageindex;
+
+  pte_t *pde;                                                                              //Endereço virtual para ser passado o diretório de páginas
+  int ndir;                                                                                //Contador para percorrer o diretório de páginas
+  pte_t *pte;                                                                              //Variavel para o endereço fisíco da página armazenada
+  pte_t *pteVa;                                                                            //Variavel para o endereço virtual da página armazenada
+  pte_t *ppn;                                                                              //Variavel para  o PNN da página armazenada
+  int npages;                                                                              //Contador para a entrada por tabela de paginas 
+  pte_t *vpn;                                                                              //Variavel para a página virtual
 
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
   {
@@ -522,38 +522,29 @@ procdump(void)
     }
     cprintf("\n");
 
+    pde = p->pgdir;                                                                        //Endereço virtual do diretório de páginas    
 
-    // task1
+    cprintf("Page tables:\n    Memory location of page directory = %p\n", V2P(pde));       //Converte endereço virtual para fisíco
 
-    pde = p->pgdir; // Endereco virtual para o diretorio de paginas do processo
-
-    cprintf("Page tables:\n");
-    cprintf("    Memory location of page directory = %p\n", V2P(pde));
-
-    for (dirindex = 0; dirindex < NPDENTRIES; dirindex++)
+    for (ndir = 0; ndir < NPDENTRIES; ndir++)                                              //Ver as entradas de diretório por diretório de paginas 
     {
-        // Page directory
-        pte = (pte_t*)PTE_ADDR(pde[dirindex]); // Endereco fisico da pagina armazenada na posicao dirindex do diretorio
-        pte_va = P2V(pte); // Endereco virutal da pagina armazenada na posicao dirindex do diretorio
-        ppn = (pte_t*)(PTE_ADDR(pde[dirindex]) >> 12); // PNN da pagina armazenada na posicao dirindex do diretorio
+        
+        pte = (pte_t*)PTE_ADDR(pde[ndir]);                                                 //Endereço físico da página
+        pteVa = P2V(pte);                                                                  //Endereço virtual da página
+        ppn = (pte_t*)(PTE_ADDR(pde[ndir]) >> 12);                                         //PPN da página
 
-        if ((pde[dirindex] & PTE_P) && (pde[dirindex] & PTE_U) && temPosicaoUtilizada(pte_va))
+        if ((pde[ndir] & PTE_P) && (pde[ndir] & PTE_U) && hasAnyPositionUsed(pteVa))       //Verifica se está sendo utilizada e quem está utilizando
         {
 
-            cprintf("    pdir PTE %d, %p:\n", dirindex, ppn); // pdir PTE index, PPN:
-            cprintf("        Memory location of page table = %p\n", pte); // memory location of page table = endereco_fisico
+            cprintf("    pdir PTE %d, %p:\n", ndir, ppn); 
+            cprintf("        Memory location of page table = %p\n", pte);
 
-            // Page table
-            for (pageindex = 0; pageindex < NPTENTRIES; pageindex++)
+            for (npages = 0; npages < NPTENTRIES; npages++)                                //Percorre a quantidade de tabelas de páginas 
             {
-                if ((pte_va[pageindex] & PTE_P) && (pte_va[pageindex] & PTE_U))
+                if ((pteVa[npages] & PTE_P) && (pteVa[npages] & PTE_U))
                 {
-                    // ptbl PTE index, PPN, endereco_fisico
-                    cprintf("       ptbl PTE %d", pageindex);
-                    cprintf(", %p", (PTE_ADDR(pte_va[pageindex]) >> 12));
-                    cprintf(", %p", PTE_ADDR(pte_va[pageindex]));
-                    cprintf(", SHARE: %d\n", getCountPPN(PTE_ADDR(pte_va[pageindex])));
-
+                    cprintf("       ptbl PTE %d", npages);
+                    cprintf(", %p, %p\n",(PTE_ADDR(pteVa[npages]) >> 12),PTE_ADDR(pteVa[npages]));
                 }
             }
         }
@@ -561,21 +552,21 @@ procdump(void)
 
     cprintf("Page mappings:\n");
 
-    for (dirindex = 0; dirindex < NPDENTRIES; dirindex++)
+    for (ndir = 0; ndir < NPDENTRIES; ndir++)
     {
-        // Page directory
-        pte = (pte_t*)PTE_ADDR(pde[dirindex]);
-        pte_va = P2V(pte);
-        vpn = (pte_t*)(PTE_ADDR(pte_va) >> 12);
-        ppn = (pte_t*)((int)pte >> 12);
+        pte = (pte_t*)PTE_ADDR(pde[ndir]);                                                 //Endereço físico da página
+        pteVa = P2V(pte);                                                                  //Endereço virtual da página
+        vpn = (pte_t*)(PTE_ADDR(pteVa) >> 12);                                             //Numero virtual da página
+        ppn = (pte_t*)((int)pte >> 12);                                                    //Numero fisíco da página
 
-        if ((pde[dirindex] & PTE_P) && (pde[dirindex] & PTE_U) && temPosicaoUtilizada(pte_va))
+        if ((pde[ndir] & PTE_P) && (pde[ndir] & PTE_U) && hasAnyPositionUsed(pteVa))
         {
             cprintf("%x -> %x\n", vpn, ppn);
         }
     }
   }
 }
+
 
 //============================== COW =========================================
 int cowfork(void){
