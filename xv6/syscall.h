@@ -20,5 +20,4 @@
 #define SYS_link   19
 #define SYS_mkdir  20
 #define SYS_close  21
-/*Definição a syscall cowfork*/
-#define SYS_cowfork    22
+#define SYS_cowfork    22                                               // Definição do numero da chamda de função de sys_cowfork
