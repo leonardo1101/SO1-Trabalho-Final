@@ -20,7 +20,7 @@ tvinit(void)
   int i;
 
   for(i = 0; i < 256; i++)
-    SETGATE(idt[i], 0, SEG_KCODE<<3, vectors[i], 0);
+  SETGATE(idt[i], 0, SEG_KCODE<<3, vectors[i], 0);
   SETGATE(idt[T_SYSCALL], 1, SEG_KCODE<<3, vectors[T_SYSCALL], DPL_USER);
 
   initlock(&tickslock, "time");
@@ -38,16 +38,23 @@ trap(struct trapframe *tf)
 {
   if(tf->trapno == T_SYSCALL){
     if(proc->killed)
-      exit();
+    exit();
     proc->tf = tf;
     syscall();
     if(proc->killed)
-      exit();
+    exit();
+    return;
+  }
+  // COW: Caso haja um pagefault
+  if (tf->trapno == T_PGFLT) {
+    proc->tf = tf;
+    // Lida com a questão de tratar o pagefault ocorrido
+    handle_pgflt();
     return;
   }
 
   switch(tf->trapno){
-  case T_IRQ0 + IRQ_TIMER:
+    case T_IRQ0 + IRQ_TIMER:
     if(cpunum() == 0){
       acquire(&tickslock);
       ticks++;
@@ -56,44 +63,40 @@ trap(struct trapframe *tf)
     }
     lapiceoi();
     break;
-  case T_IRQ0 + IRQ_IDE:
+    case T_IRQ0 + IRQ_IDE:
     ideintr();
     lapiceoi();
     break;
-  case T_IRQ0 + IRQ_IDE+1:
+    case T_IRQ0 + IRQ_IDE+1:
     // Bochs generates spurious IDE1 interrupts.
     break;
-  case T_IRQ0 + IRQ_KBD:
+    case T_IRQ0 + IRQ_KBD:
     kbdintr();
     lapiceoi();
     break;
-  case T_IRQ0 + IRQ_COM1:
+    case T_IRQ0 + IRQ_COM1:
     uartintr();
     lapiceoi();
     break;
-  case T_IRQ0 + 7:
-  case T_IRQ0 + IRQ_SPURIOUS:
+    case T_IRQ0 + 7:
+    case T_IRQ0 + IRQ_SPURIOUS:
     cprintf("cpu%d: spurious interrupt at %x:%x\n",
-            cpunum(), tf->cs, tf->eip);
+    cpunum(), tf->cs, tf->eip);
     lapiceoi();
     break;
 
-  //PAGEBREAK: 13
-  default:
+    //PAGEBREAK: 13
+    default:
     if(proc == 0 || (tf->cs&3) == 0){
       // In kernel, it must be our mistake.
       cprintf("unexpected trap %d from cpu %d eip %x (cr2=0x%x)\n",
-              tf->trapno, cpunum(), tf->eip, rcr2());
+      tf->trapno, cpunum(), tf->eip, rcr2());
       panic("trap");
     }
     // In user space, assume process misbehaved.
-    cprintf("pid %d %s: trap %d err %d on cpu %d "
-            "eip 0x%x addr 0x%x--kill proc\n",
-            proc->pid, proc->name, tf->trapno, tf->err, cpunum(), tf->eip,
-            rcr2());
-    if (rcr2() == 0 && tf->trapno == 14) {
-                cprintf("Null Point\n");
-    }
+    cprintf("pid %d %s: trap %d err %d on cpu %d eip 0x%x addr 0x%x--kill proc\n",
+    proc->pid, proc->name, tf->trapno, tf->err, cpunum(), tf->eip,
+    rcr2());
     proc->killed = 1;
   }
 
@@ -101,14 +104,14 @@ trap(struct trapframe *tf)
   // (If it is still executing in the kernel, let it keep running
   // until it gets to the regular system call return.)
   if(proc && proc->killed && (tf->cs&3) == DPL_USER)
-    exit();
+  exit();
 
   // Force process to give up CPU on clock tick.
   // If interrupts were on while locks held, would need to check nlock.
   if(proc && proc->state == RUNNING && tf->trapno == T_IRQ0+IRQ_TIMER)
-    yield();
+  yield();
 
   // Check if the process has been killed since we yielded
   if(proc && proc->killed && (tf->cs&3) == DPL_USER)
-    exit();
+  exit();
 }

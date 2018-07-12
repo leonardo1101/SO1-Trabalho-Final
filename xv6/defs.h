@@ -105,6 +105,8 @@ int             pipewrite(struct pipe*, char*, int);
 // proc.c
 void            exit(void);
 int             fork(void);
+/*Definição do cowfork*/
+int            cowfork(void);
 int             growproc(int);
 int             kill(int);
 void            pinit(void);
@@ -175,8 +177,20 @@ int             allocuvm(pde_t*, uint, uint);
 int             deallocuvm(pde_t*, uint, uint);
 void            freevm(pde_t*);
 void            inituvm(pde_t*, char*, uint);
-int             loaduvm(pde_t*, char*, struct inode*, uint, uint);
+int             loaduvm(pde_t*, char*, struct inode*, uint, uint, uint);
 pde_t*          copyuvm(pde_t*, uint);
+
+//================ COW ======================
+pde_t*          share_cow(pde_t*, uint);
+void            handle_pgflt (void);
+int             copyuvm_cow(uint);
+void            sharetableinit(void);
+int             getCountPPN(uint);
+void            incCountPPN(uint);
+void            decCountPPN(uint);
+void            freevm_cow(pde_t*);
+//===========================================
+
 void            switchuvm(struct proc*);
 void            switchkvm(void);
 int             copyout(pde_t*, uint, void*, uint);

@@ -12,6 +12,11 @@ sys_fork(void)
 {
   return fork();
 }
+// COW
+int sys_cowfork(void)
+{
+  return cowfork();
+}
 
 int
 sys_exit(void)

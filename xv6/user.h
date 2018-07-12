@@ -3,6 +3,8 @@ struct rtcdate;
 
 // system calls
 int fork(void);
+// COW
+int cowfork(void);
 int exit(void) __attribute__((noreturn));
 int wait(void);
 int pipe(int*);

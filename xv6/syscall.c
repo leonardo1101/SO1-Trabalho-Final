@@ -83,6 +83,9 @@ extern int sys_dup(void);
 extern int sys_exec(void);
 extern int sys_exit(void);
 extern int sys_fork(void);
+/*Implementação da cowfork*/
+extern int sys_cowfork(void);
+
 extern int sys_fstat(void);
 extern int sys_getpid(void);
 extern int sys_kill(void);
@@ -99,8 +102,11 @@ extern int sys_wait(void);
 extern int sys_write(void);
 extern int sys_uptime(void);
 
+
 static int (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
+/*Implementação da cowfork*/
+[SYS_cowfork] sys_cowfork,
 [SYS_exit]    sys_exit,
 [SYS_wait]    sys_wait,
 [SYS_pipe]    sys_pipe,

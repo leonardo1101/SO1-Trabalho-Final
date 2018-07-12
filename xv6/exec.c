@@ -37,7 +37,13 @@ exec(char *path, char **argv)
     goto bad;
 
   // Load program into memory.
-  sz = 4096;
+  // Modificado para deixar a pagina 0 vazia
+  sz = PGSIZE-1;
+
+  // se
+  if((sz = allocuvm(pgdir, sz, PGSIZE))==0)
+    goto bad;
+
   for(i=0, off=elf.phoff; i<elf.phnum; i++, off+=sizeof(ph)){
     if(readi(ip, (char*)&ph, off, sizeof(ph)) != sizeof(ph))
       goto bad;
@@ -51,9 +57,11 @@ exec(char *path, char **argv)
       goto bad;
     if(ph.vaddr % PGSIZE != 0)
       goto bad;
+
     if(loaduvm(pgdir, (char*)ph.vaddr, ip, ph.off, ph.filesz, ph.flags) < 0)
-      goto bad;
+        goto bad;
   }
+
   iunlockput(ip);
   end_op();
   ip = 0;
@@ -63,6 +71,7 @@ exec(char *path, char **argv)
   sz = PGROUNDUP(sz);
   if((sz = allocuvm(pgdir, sz, sz + 2*PGSIZE)) == 0)
     goto bad;
+  //torna a pagina inacessivel
   clearpteu(pgdir, (char*)(sz - 2*PGSIZE));
   sp = sz;
 
@@ -99,6 +108,7 @@ exec(char *path, char **argv)
   proc->tf->esp = sp;
   switchuvm(proc);
   freevm(oldpgdir);
+  
   return 0;
 
  bad:

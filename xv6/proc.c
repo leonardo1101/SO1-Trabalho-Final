@@ -20,8 +20,7 @@ extern void trapret(void);
 
 static void wakeup1(void *chan);
 
-void
-pinit(void)
+void pinit(void)
 {
   initlock(&ptable.lock, "ptable");
 }
@@ -31,8 +30,7 @@ pinit(void)
 // If found, change state to EMBRYO and initialize
 // state required to run in the kernel.
 // Otherwise return 0.
-static struct proc*
-allocproc(void)
+static struct proc* allocproc(void)
 {
   struct proc *p;
   char *sp;
@@ -40,13 +38,13 @@ allocproc(void)
   acquire(&ptable.lock);
 
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-    if(p->state == UNUSED)
-      goto found;
+  if(p->state == UNUSED)
+  goto found;
 
   release(&ptable.lock);
   return 0;
 
-found:
+  found:
   p->state = EMBRYO;
   p->pid = nextpid++;
 
@@ -72,6 +70,7 @@ found:
   p->context = (struct context*)sp;
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
+  p->shared = 0;
 
   return p;
 }
@@ -85,10 +84,10 @@ userinit(void)
   extern char _binary_initcode_start[], _binary_initcode_size[];
 
   p = allocproc();
-  
+
   initproc = p;
   if((p->pgdir = setupkvm()) == 0)
-    panic("userinit: out of memory?");
+  panic("userinit: out of memory?");
   inituvm(p->pgdir, _binary_initcode_start, (int)_binary_initcode_size);
   p->sz = PGSIZE;
   memset(p->tf, 0, sizeof(*p->tf));
@@ -124,10 +123,10 @@ growproc(int n)
   sz = proc->sz;
   if(n > 0){
     if((sz = allocuvm(proc->pgdir, sz, sz + n)) == 0)
-      return -1;
+    return -1;
   } else if(n < 0){
     if((sz = deallocuvm(proc->pgdir, sz, sz + n)) == 0)
-      return -1;
+    return -1;
   }
   proc->sz = sz;
   switchuvm(proc);
@@ -137,8 +136,7 @@ growproc(int n)
 // Create a new process copying p as the parent.
 // Sets up stack to return as if from system call.
 // Caller must set state of returned proc to RUNNABLE.
-int
-fork(void)
+int fork(void)
 {
   int i, pid;
   struct proc *np;
@@ -163,8 +161,8 @@ fork(void)
   np->tf->eax = 0;
 
   for(i = 0; i < NOFILE; i++)
-    if(proc->ofile[i])
-      np->ofile[i] = filedup(proc->ofile[i]);
+  if(proc->ofile[i])
+  np->ofile[i] = filedup(proc->ofile[i]);
   np->cwd = idup(proc->cwd);
 
   safestrcpy(np->name, proc->name, sizeof(proc->name));
@@ -176,6 +174,8 @@ fork(void)
   np->state = RUNNABLE;
 
   release(&ptable.lock);
+
+  cprintf("Criou processo: %d Pgdir:%p\n", np->pid, np->pgdir);
 
   return pid;
 }
@@ -190,7 +190,7 @@ exit(void)
   int fd;
 
   if(proc == initproc)
-    panic("init exiting");
+  panic("init exiting");
 
   // Close all open files.
   for(fd = 0; fd < NOFILE; fd++){
@@ -215,20 +215,20 @@ exit(void)
     if(p->parent == proc){
       p->parent = initproc;
       if(p->state == ZOMBIE)
-        wakeup1(initproc);
+      wakeup1(initproc);
     }
   }
 
   // Jump into the scheduler, never to return.
   proc->state = ZOMBIE;
   sched();
+  cprintf("Deu exit\n");
   panic("zombie exit");
 }
 
 // Wait for a child process to exit and return its pid.
 // Return -1 if this process has no children.
-int
-wait(void)
+int wait(void)
 {
   struct proc *p;
   int havekids, pid;
@@ -239,14 +239,25 @@ wait(void)
     havekids = 0;
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->parent != proc)
-        continue;
+      continue;
       havekids = 1;
       if(p->state == ZOMBIE){
         // Found one.
         pid = p->pid;
         kfree(p->kstack);
         p->kstack = 0;
-        freevm(p->pgdir);
+        // COW
+        // Se o processo não possui paginas compartilhadas, pode liberar a memória
+        if (p->shared == 0) {
+          freevm(p->pgdir);
+        }
+        // Caso esteja compartilhando alguma pagina, é necessário liberar apenas
+        // as paginas que não estão sendo compartilhadas
+        else {
+          freevm_cow(p->pgdir);
+          p->shared = 0;
+        }
+
         p->pid = 0;
         p->parent = 0;
         p->name[0] = 0;
@@ -289,7 +300,7 @@ scheduler(void)
     acquire(&ptable.lock);
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->state != RUNNABLE)
-        continue;
+      continue;
 
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
@@ -322,13 +333,13 @@ sched(void)
   int intena;
 
   if(!holding(&ptable.lock))
-    panic("sched ptable.lock");
+  panic("sched ptable.lock");
   if(cpu->ncli != 1)
-    panic("sched locks");
+  panic("sched locks");
   if(proc->state == RUNNING)
-    panic("sched running");
+  panic("sched running");
   if(readeflags()&FL_IF)
-    panic("sched interruptible");
+  panic("sched interruptible");
   intena = cpu->intena;
   swtch(&proc->context, cpu->scheduler);
   cpu->intena = intena;
@@ -371,10 +382,10 @@ void
 sleep(void *chan, struct spinlock *lk)
 {
   if(proc == 0)
-    panic("sleep");
+  panic("sleep");
 
   if(lk == 0)
-    panic("sleep without lk");
+  panic("sleep without lk");
 
   // Must acquire ptable.lock in order to
   // change p->state and then call sched.
@@ -411,8 +422,8 @@ wakeup1(void *chan)
   struct proc *p;
 
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-    if(p->state == SLEEPING && p->chan == chan)
-      p->state = RUNNABLE;
+  if(p->state == SLEEPING && p->chan == chan)
+  p->state = RUNNABLE;
 }
 
 // Wake up all processes sleeping on chan.
@@ -438,7 +449,7 @@ kill(int pid)
       p->killed = 1;
       // Wake process from sleep if necessary.
       if(p->state == SLEEPING)
-        p->state = RUNNABLE;
+      p->state = RUNNABLE;
       release(&ptable.lock);
       return 0;
     }
@@ -447,9 +458,9 @@ kill(int pid)
   return -1;
 }
 
-// Função que verifica se alguma posição de memória está sendo utilizada
+// Retorna se a página apontada por pte possui alguma posição de memória sendo utilizada
 uint
-hasAnyPositionUsed(pte_t *pte)
+temPosicaoUtilizada(pte_t *pte)
 {
     int i;
     for (i = 0; i < NPTENTRIES; i++)
@@ -485,14 +496,14 @@ procdump(void)
   char *state;
   uint pc[10];
 
-  
-  pte_t *pde;                                                                              //Endereço virtual para ser passado o diretório de páginas
-  int ndir;                                                                                //Contador para percorrer o diretório de páginas
-  pte_t *pte;                                                                              //Variavel para o endereço fisíco da página armazenada
-  pte_t *pteVa;                                                                            //Variavel para o endereço virtual da página armazenada
-  pte_t *ppn;                                                                              //Variavel para  o PNN da página armazenada
-  int npages;                                                                              //Contador para a entrada por tabela de paginas 
-  pte_t *vpn;                                                                              //Variavel para a página virtual
+  // Declaracoes para task1
+  pte_t *pde; // Endereco virtual para o diretorio de paginas do processo
+  pte_t *pte; // Endereco fisico para uma page table
+  pte_t *pte_va; // Endereco virtual para uma page table
+  pte_t *ppn; // Phisical Page Number
+  pte_t *vpn; // Virtual Page Number
+  int dirindex;
+  int pageindex;
 
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
   {
@@ -511,29 +522,38 @@ procdump(void)
     }
     cprintf("\n");
 
-    pde = p->pgdir;                                                                        //Endereço virtual do diretório de páginas    
 
-    cprintf("Page tables:\n    Memory location of page directory = %p\n", V2P(pde));       //Converte endereço virtual para fisíco
+    // task1
 
-    for (ndir = 0; ndir < NPDENTRIES; ndir++)                                              //Ver as entradas de diretório por diretório de paginas 
+    pde = p->pgdir; // Endereco virtual para o diretorio de paginas do processo
+
+    cprintf("Page tables:\n");
+    cprintf("    Memory location of page directory = %p\n", V2P(pde));
+
+    for (dirindex = 0; dirindex < NPDENTRIES; dirindex++)
     {
-        
-        pte = (pte_t*)PTE_ADDR(pde[ndir]);                                                 //Endereço físico da página
-        pteVa = P2V(pte);                                                                  //Endereço virtual da página
-        ppn = (pte_t*)(PTE_ADDR(pde[ndir]) >> 12);                                         //PPN da página
+        // Page directory
+        pte = (pte_t*)PTE_ADDR(pde[dirindex]); // Endereco fisico da pagina armazenada na posicao dirindex do diretorio
+        pte_va = P2V(pte); // Endereco virutal da pagina armazenada na posicao dirindex do diretorio
+        ppn = (pte_t*)(PTE_ADDR(pde[dirindex]) >> 12); // PNN da pagina armazenada na posicao dirindex do diretorio
 
-        if ((pde[ndir] & PTE_P) && (pde[ndir] & PTE_U) && hasAnyPositionUsed(pteVa))       //Verifica se está sendo utilizada e quem está utilizando
+        if ((pde[dirindex] & PTE_P) && (pde[dirindex] & PTE_U) && temPosicaoUtilizada(pte_va))
         {
 
-            cprintf("    pdir PTE %d, %p:\n", ndir, ppn); 
-            cprintf("        Memory location of page table = %p\n", pte);
+            cprintf("    pdir PTE %d, %p:\n", dirindex, ppn); // pdir PTE index, PPN:
+            cprintf("        Memory location of page table = %p\n", pte); // memory location of page table = endereco_fisico
 
-            for (npages = 0; npages < NPTENTRIES; npages++)                                //Percorre a quantidade de tabelas de páginas 
+            // Page table
+            for (pageindex = 0; pageindex < NPTENTRIES; pageindex++)
             {
-                if ((pteVa[npages] & PTE_P) && (pteVa[npages] & PTE_U))
+                if ((pte_va[pageindex] & PTE_P) && (pte_va[pageindex] & PTE_U))
                 {
-                    cprintf("       ptbl PTE %d", npages);
-                    cprintf(", %p, %p\n",(PTE_ADDR(pteVa[npages]) >> 12),PTE_ADDR(pteVa[npages]));
+                    // ptbl PTE index, PPN, endereco_fisico
+                    cprintf("       ptbl PTE %d", pageindex);
+                    cprintf(", %p", (PTE_ADDR(pte_va[pageindex]) >> 12));
+                    cprintf(", %p", PTE_ADDR(pte_va[pageindex]));
+                    cprintf(", SHARE: %d\n", getCountPPN(PTE_ADDR(pte_va[pageindex])));
+
                 }
             }
         }
@@ -541,14 +561,15 @@ procdump(void)
 
     cprintf("Page mappings:\n");
 
-    for (ndir = 0; ndir < NPDENTRIES; ndir++)
+    for (dirindex = 0; dirindex < NPDENTRIES; dirindex++)
     {
-        pte = (pte_t*)PTE_ADDR(pde[ndir]);                                                 //Endereço físico da página
-        pteVa = P2V(pte);                                                                  //Endereço virtual da página
-        vpn = (pte_t*)(PTE_ADDR(pteVa) >> 12);                                             //Numero virtual da página
-        ppn = (pte_t*)((int)pte >> 12);                                                    //Numero fisíco da página
+        // Page directory
+        pte = (pte_t*)PTE_ADDR(pde[dirindex]);
+        pte_va = P2V(pte);
+        vpn = (pte_t*)(PTE_ADDR(pte_va) >> 12);
+        ppn = (pte_t*)((int)pte >> 12);
 
-        if ((pde[ndir] & PTE_P) && (pde[ndir] & PTE_U) && hasAnyPositionUsed(pteVa))
+        if ((pde[dirindex] & PTE_P) && (pde[dirindex] & PTE_U) && temPosicaoUtilizada(pte_va))
         {
             cprintf("%x -> %x\n", vpn, ppn);
         }
@@ -556,3 +577,49 @@ procdump(void)
   }
 }
 
+//============================== COW =========================================
+int cowfork(void){
+  int i, pid;
+  struct proc *np;
+
+  // // Realiza o processo de alocação do processo a ser criado.
+  if((np = allocproc()) == 0)
+    return -1;
+
+  // Aqui está a principal diferenca do fork original
+  // Ao invés de copiar a memória do pai para o filho,
+  // é realizado o compartilhamento pela função share_cow
+  if((np->pgdir = share_cow(proc->pgdir, proc->sz)) == 0){
+    kfree(np->kstack);
+    np->kstack = 0;
+    np->state = UNUSED;
+    return -1;
+  }
+  np->sz = proc->sz;
+  np->parent = proc;
+  *np->tf = *proc->tf;
+
+  // Clear %eax so that fork returns 0 in the child.
+  np->tf->eax = 0;
+
+  // Indica que, tanto o  processo pai quanto o processo filho contém paginas
+  // compartilhadas
+  proc->shared = 1;
+  np->shared = 1;
+
+  for(i = 0; i < NOFILE; i++)
+    if(proc->ofile[i])
+      np->ofile[i] = filedup(proc->ofile[i]);
+  np->cwd = idup(proc->cwd);
+
+  safestrcpy(np->name, proc->name, sizeof(proc->name));
+
+  pid = np->pid;
+
+  // lock to force the compiler to emit the np->state write last.
+  acquire(&ptable.lock);
+  np->state = RUNNABLE;
+  release(&ptable.lock);
+
+  return pid;
+}

@@ -51,6 +51,8 @@ forktest(void)
 int
 main(void)
 {
-  forktest();
+  void *m = main;
+  *((char *)m) = 0;
+  printf(1,"Hello World\n");
   exit();
 }
