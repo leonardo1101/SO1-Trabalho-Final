@@ -12,7 +12,7 @@ sys_fork(void)
 {
   return fork();
 }
-// COW
+// Chamada da syscall 
 int sys_cowfork(void)
 {
   return cowfork();
