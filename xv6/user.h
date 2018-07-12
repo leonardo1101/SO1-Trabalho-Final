@@ -3,7 +3,7 @@ struct rtcdate;
 
 // system calls
 int fork(void);
-// COW
+// Criação do protótipo da chamada de sistema da sys_cow
 int cowfork(void);
 int exit(void) __attribute__((noreturn));
 int wait(void);
