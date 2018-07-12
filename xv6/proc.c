@@ -567,8 +567,6 @@ procdump(void)
   }
 }
 
-
-//============================== COW =========================================
 int cowfork(void){
   int i, pid;
   struct proc *np;
