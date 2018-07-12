@@ -37,8 +37,8 @@ exec(char *path, char **argv)
     goto bad;
 
   // Load program into memory.
-  // Modificado para deixar a pagina 0 vazia
-  sz = PGSIZE-1;
+  // Pula para proxima página, para deixar a 0 vazia
+  sz = 4096;
 
   // se
   if((sz = allocuvm(pgdir, sz, PGSIZE))==0)
