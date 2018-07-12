@@ -236,7 +236,8 @@ setupkvm(void)
 
   // Load a program segment into pgdir.  addr must be page-aligned
   // and the pages from addr to addr+sz must already be mapped.
-  int loaduvm(pde_t *pgdir, char *addr, struct inode *ip, uint offset, uint sz, uint perm)
+  // Modificado para averiguar as permissões
+  int loaduvm(pde_t *pgdir, char *addr, struct inode *ip, uint offset, uint sz, uint permission)
   {
     uint i, pa, n;
     pte_t *pte;
@@ -248,9 +249,9 @@ setupkvm(void)
       panic("loaduvm: address should exist");
       pa = PTE_ADDR(*pte);
 
-      perm = perm & PTE_W;
-      if(perm){
-        *pte |= perm;
+      permission = permission & PTE_W;
+      if(permission){
+        *pte |= permission;
       }
       else{
         *pte &= ~PTE_W;
@@ -366,7 +367,7 @@ setupkvm(void)
 
     if((d = setupkvm()) == 0)
     return 0;
-
+    //Comeca do PGSIZE para não colocar na parte da memória que seria o Null Point
     for(i = PGSIZE; i < sz; i += PGSIZE){
       if((pte = walkpgdir(pgdir, (void *) i, 0)) == 0)
       panic("copyuvm: pte should exist");
