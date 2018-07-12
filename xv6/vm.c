@@ -8,13 +8,11 @@
 #include "elf.h"
 #include "spinlock.h"
 
-//=============================== COW ================================
-#define TAMSHARETABLE PHYSTOP >> 12 //O maximo de memória que pode ser mapeada
-// Tabela que informa a quantidade de processos que estão utilizando o mesmo espaço de memória
+#define TAMSHARETABLE PHYSTOP >> 12   // Numero maximo de memória que pode ser mapeada
+                                      // Informando a quantidade de processos usando uma parte da memória disponivel
 static int shareTable[TAMSHARETABLE]; // tabela que possui entrada para todas as paginas da memoria
 
-// Estura utilizada para bloquear o código crítico de quando é necessário
-// Realizar mudanças na shareTable
+// Utilizada para bloquear o código crítico quando necessário realizar mudanças na shareTable
 struct spinlock tablelock;
 
 // Configura o tablelock e inicia a tabela de compartilhamento de paginas
@@ -49,7 +47,6 @@ void decCountPPN(uint pa){
   int index = (pa >> 12) & 0xFFFFF; // recupera o PPN do PA passado
   shareTable[index]--; // Decrementa o numero de compartilhamento quando um dos processos deixa de utlizar a posicao de memoria
 }
-//===============================================================
 
 
 extern char data[];  // defined by kernel.ld
@@ -438,7 +435,6 @@ setupkvm(void)
   //PAGEBREAK!
   // Blank page.
 
-//=========================== COW ===========================
 
 pde_t* share_cow(pde_t *pgdir, uint sz)
 {
@@ -605,4 +601,3 @@ void freevm_cow(pde_t *pgdir)
   }
   kfree((char*)pgdir);
 }
-// ==========================================================================
