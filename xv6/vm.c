@@ -15,7 +15,7 @@ static int shareTable[TAMSHARETABLE]; // tabela que possui entrada para todas as
 // Utilizada para bloquear o código crítico quando necessário realizar mudanças na shareTable
 struct spinlock tablelock;
 
-// Configura o tablelock e inicia a tabela de compartilhamento de paginas
+// Configura o tablelock 
 void sharetableinit(void)
 {
   initlock(&tablelock, "sharetable");
@@ -26,26 +26,24 @@ void sharetableinit(void)
     shareTable[i]=0;
   }
   release(&tablelock);
-
-  cprintf("Inicializacao da ShareTable concluida\n");
 }
 
 int getCountPPN(uint pa){
 
-  int index = (pa >> 12) & 0xFFFFF; // recupera o PPN do PA passado
-  return shareTable[index]; // Retorna o numero de processos que estão compartilhando a mesma pagina de memoria fisica
+  int index = (pa >> 12) & 0xFFFFF; // Retorna o PPN do PA passado
+  return shareTable[index]; // Retorna o numero de processos que estão compartilhando
 }
 
 void incCountPPN(uint pa){
 
-  int index = (pa >> 12) & 0xFFFFF; // recupera o PPN do PA passado
-  shareTable[index]++; // Incrementa o numero de processos que estão compartilhando a posiçao de memória
+  int index = (pa >> 12) & 0xFFFFF; // Retorna o PPN do PA passado
+  shareTable[index]++; // Incrementa o numero de processos que estão compartilhando 
 }
 
 void decCountPPN(uint pa){
 
-  int index = (pa >> 12) & 0xFFFFF; // recupera o PPN do PA passado
-  shareTable[index]--; // Decrementa o numero de compartilhamento quando um dos processos deixa de utlizar a posicao de memoria
+  int index = (pa >> 12) & 0xFFFFF; // Retorna o PPN do PA passado
+  shareTable[index]--; // Decrementa o numero de compartilhamento quando um dos processos 
 }
 
 
@@ -442,25 +440,24 @@ pde_t* share_cow(pde_t *pgdir, uint sz)
   pde_t *d;
   pte_t *pte;
   uint pa, i, flags;
-
+   // Aloca uma nova page table 
   if((d = setupkvm()) == 0)
     return 0;
-
+  // Bloqueia as operações na tablelock
   acquire(&tablelock);
   for(i = PGSIZE; i < sz; i += PGSIZE){
     if((pte = walkpgdir(pgdir, (void *) i, 0)) == 0)
       panic("copyuvm: pte should exist");
     if(!(*pte & PTE_P))
       panic("copyuvm: page not present");
-    *pte &= ~PTE_W; // torna read-only (desabilita a escrita)
+    *pte &= ~PTE_W; // Torna read-only 
     *pte |= PTE_SHARE; // Indica que a página é compartilhada
     pa = PTE_ADDR(*pte);
     flags = PTE_FLAGS(*pte);
-
-    // instead of create new pages, remap the pages for cow child
+// Mapeia para o PTE da nova page table o endereço físico (pa) do pte do processo pai
     if(mappages(d, (void*)i, PGSIZE, pa, flags) < 0)
       goto bad;
-
+    // Indica que agora há dois processos compartilhando ela, caso não fora compartilhado
     if(getCountPPN(pa) == 0){
       incCountPPN(pa);
       incCountPPN(pa);
@@ -468,12 +465,12 @@ pde_t* share_cow(pde_t *pgdir, uint sz)
     else{
       incCountPPN(pa);
     }
-
-    // cprintf("pid: %d index: %p count: %d\n", proc->pid, pa, getCountPPN(pa));
   }
+  
+  // Desbloqueia o código 
   release(&tablelock);
 
-  lcr3(V2P(proc->pgdir)); // atualiza o TLB
+  lcr3(V2P(proc->pgdir)); // Atualiza o TLB
 
   return d;
 
@@ -483,16 +480,14 @@ bad:
 }
 
 void handle_pgflt(void){
-  // Recupera o endereço virtual onde ocorreu o pagefault (armazenado no registrador cr2)
+  // Recupera o endereço virtual onde ocorreu o pagefault - armazenado no registrador cr2.
   uint addr = rcr2();
-  // Se o endereço que tentou ser acessado foi o 0 - avisar que foi um
-  // null pointer Exception
   if (addr == 0) {
     cprintf("Segmentation Fault - Null Pointer Dereference\n");
     kill(proc->pid);
   }
   // Se o processo possui paginas compartilhadas, realiza a cópia da memoria
-  // que causou o pagefault (por ser read only)
+  // que causou o pagefault, por ser read only
   else{
     // Recupera o Page Table Entry do endereço acima para o processo atual
     pte_t* pte = walkpgdir(proc->pgdir, (void *) addr, 0);
@@ -514,19 +509,18 @@ int copyuvm_cow(uint addr)
   pte_t *pte;
   char *mem;
 
-  // Recupera o Page Table Entry do endereço acima para o processo atual
+  // Recupera o Page Table Entry do endereço passado como parâmetro
   pte = walkpgdir(proc->pgdir, (void *) addr, 0);
   pa = PTE_ADDR(*pte);
 
   acquire(&tablelock);
-  // Se pagina está sendo compartilhada
   if (getCountPPN(pa) > 1) {
     if((mem = kalloc()) == 0) // aloca uma nova página de memoria
       goto bad;
     memmove(mem, (char*)P2V(pa), PGSIZE);
-    *pte &= 0xFFF; // pega todas as flags de pte
-    *pte &= ~PTE_SHARE; // retira a flag de compartilhamento
-    *pte |= V2P(mem) | PTE_W; // insere a permissão de escrita na nova pagina de memória
+    *pte &= 0xFFF; // Pega todas as flags de pte
+    *pte &= ~PTE_SHARE; // Retira a flag de compartilhamento
+    *pte |= V2P(mem) | PTE_W; // Insere a permissão de escrita na nova pagina de memória
     decCountPPN(pa); // Decrementa a quantidade de processos que estão compartilhando a mesma memória
   }
   // Se há apenas um processo usando a pagina, basta dar permissão para escrita e retira a flag de compartilhamento
@@ -537,7 +531,7 @@ int copyuvm_cow(uint addr)
 
   release(&tablelock);
 
-  lcr3(V2P(proc->pgdir)); // flush the TLB
+  lcr3(V2P(proc->pgdir)); // Atualiza o TLB
 
   return 1;
 
@@ -554,7 +548,6 @@ int deallocuvm_cow(pde_t *pgdir, uint oldsz, uint newsz)
     return oldsz;
 
   a = PGROUNDUP(newsz);
-  // Será realizada mudanças na shareTable, é necessário bloquea-la, para que não haja problema de concorrência e a torne inválida
   acquire(&tablelock);
   for(; a < oldsz; a += PGSIZE){
     pte = walkpgdir(pgdir, (char*)a, 0);
@@ -565,18 +558,17 @@ int deallocuvm_cow(pde_t *pgdir, uint oldsz, uint newsz)
       if(pa == 0)
         panic("kfree");
       // Se a memoria está sendo compartilhada, decrementa a quantidade de processos que estão compartilhando
-      // Pois está sendo desalocada do processo atual
       if (getCountPPN(pa) > 1) {
         decCountPPN(pa);
       }
-      // se a memoria não está sendo compartilhada com nenhum outro processo
+      // Caso  a memoria não está sendo compartilhada com nenhum outro processo
       // pode ser liberada completamente
       else {
         char *v = P2V(pa);
         kfree(v);
         decCountPPN(pa);
       }
-      // Faz o ponteiro para page table entry apontar para null
+       // Faz o ponteiro para page table entry apontar para null
       *pte = 0;
     }
   }
@@ -593,7 +585,7 @@ void freevm_cow(pde_t *pgdir)
   // Desaloca as page tabels
   deallocuvm_cow(pgdir, KERNBASE, 0);
 
-  // desaloca os page directories
+  // Desaloca os page directories
   for(i = 0; i < NPDENTRIES; i++){
     if(pgdir[i] & PTE_P){
       char *v = P2V(PTE_ADDR(pgdir[i]));
